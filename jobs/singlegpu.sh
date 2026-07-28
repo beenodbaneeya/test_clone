@@ -17,36 +17,24 @@ ml use /cluster/projects/hidden/jorn/easybuild-gpu/modules/all
 ml PyTorch/2.12.0
 
 
-# Assumes submission from the repository jobs/ directory.
+# Get the absolute path to the project directory.
 PROJECT_DIR=$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)
-LOCAL_LOGS_DIR="${SLURM_SUBMIT_DIR}/logs"
 
 # Training command
-TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train.py"
-TRAINING_ARGS=(
-  --model wideresnet
-  --dataset cifar100
-  --seed 42
-  --batch-size 256
-  --epochs 100
-)
-
-# Change working directory to project root
-cd "${PROJECT_DIR}"
-
+TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train.py --model wideresnet --dataset cifar100 --seed 42 --batch-size 256 --epochs 100"
 
 # Check GPU availability
 echo "Checking GPU availability..."
 python -c 'import torch; print(torch.cuda.is_available()); print(torch.cuda.device_count())'
 
 # Start GPU utilization monitoring in the background
-GPU_LOG_FILE="${LOCAL_LOGS_DIR}/singlegpu.log"
+GPU_LOG_FILE="${PROJECT_DIR}/jobs/logs/singlegpu.log"
 echo "Starting GPU utilization monitoring..."
 nvidia-smi --query-gpu=timestamp,index,name,utilization.gpu,utilization.memory,memory.total,memory.used --format=csv -l 5 > "${GPU_LOG_FILE}" &
 NVIDIA_MONITOR_PID=$!
 
 # Run the training script
-python "${TRAINING_SCRIPT}" "${TRAINING_ARGS[@]}"
+python $TRAINING_SCRIPT
 
 # Stop GPU utilization monitoring specifically by PID
 echo "Stopping GPU utilization monitoring..."

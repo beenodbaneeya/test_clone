@@ -18,27 +18,11 @@ ml use /cluster/projects/hidden/jorn/easybuild-gpu/modules/all
 ml PyTorch/2.12.0
 
 
-# Assumes submission from the repository jobs/ directory.
+# Get the absolute path to the project directory.
 PROJECT_DIR=$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)
-LOCAL_LOGS_DIR="${SLURM_SUBMIT_DIR}/logs"
 
 # Training command
-TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train_ddp.py"
-TRAINING_ARGS=(
-  --model wideresnet
-  --dataset cifar100
-  --epochs 100
-  --batch-size 2048
-  --base-lr 0.02
-  --target-accuracy 0.95
-  --patience 2
-  --seed 42
-)
-
-# Change working directory to project root
-cd "${PROJECT_DIR}"
-
-
+TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train_ddp.py --model wideresnet --dataset cifar100 --epochs 100 --batch-size 2048 --base-lr 0.02 --target-accuracy 0.95 --patience 2 --seed 42"
 
 export NCCL_DEBUG=INFO
 export NCCL_DEBUG_SUBSYS=INIT,NET
@@ -54,7 +38,7 @@ echo "Head Node IP: $head_node_ip"
 
 
 # Start GPU utilization monitoring
-GPU_LOG_FILE="${LOCAL_LOGS_DIR}/multinode.log"
+GPU_LOG_FILE="${PROJECT_DIR}/jobs/logs/multinode.log"
 echo "Starting GPU utilization monitoring..."
 nvidia-smi --query-gpu=timestamp,index,name,utilization.gpu,utilization.memory,memory.total,memory.used --format=csv -l 5 > "${GPU_LOG_FILE}" &
 NVIDIA_MONITOR_PID=$!
@@ -66,7 +50,7 @@ srun torchrun \
   --rdzv_id="$SLURM_JOB_ID" \
   --rdzv_backend=c10d \
   --rdzv_endpoint="$head_node_ip:29500" \
-  "${TRAINING_SCRIPT}" "${TRAINING_ARGS[@]}"
+  $TRAINING_SCRIPT
 
 # Stop GPU utilization monitoring
 echo "Stopping GPU utilization monitoring..."
