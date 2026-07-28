@@ -17,13 +17,9 @@ ml NRIS/GPU
 ml use /cluster/projects/hidden/jorn/easybuild-gpu/modules/all
 ml PyTorch/2.12.0
 
-# Resolve script and project directories independent of submit location.
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-PROJECT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
-
-# Ensure logs are always written under jobs/logs
-LOCAL_LOGS_DIR="${SCRIPT_DIR}/logs"
-mkdir -p "${LOCAL_LOGS_DIR}"
+# Assumes submission from the repository jobs/ directory.
+PROJECT_DIR=$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)
+LOCAL_LOGS_DIR="${SLURM_SUBMIT_DIR}/logs"
 
 # Training command
 TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train_ddp.py"
@@ -56,4 +52,4 @@ torchrun --standalone --nnodes="$SLURM_JOB_NUM_NODES" --nproc_per_node="$SLURM_G
 
 # Stop GPU utilization monitoring specifically by PID
 echo "Stopping GPU utilization monitoring..."
-kill "${NVIDIA_MONITOR_PID}"
+kill "${NVIDIA_MONITOR_PID}" 2>/dev/null || true
