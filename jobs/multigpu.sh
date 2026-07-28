@@ -1,0 +1,59 @@
+#!/bin/bash
+#SBATCH --job-name=pytorch_multigpu
+#SBATCH --account=hidden
+#SBATCH --output=logs/multigpu_%j.out
+#SBATCH --error=logs/multigpu_%j.err
+#SBATCH --time=00:30:00
+#SBATCH --partition=accel           # GPU partition
+#SBATCH --nodes=1                    # Single compute node
+#SBATCH --ntasks-per-node=1          # One task (process) on the node
+#SBATCH --cpus-per-task=40           # Reserve 40 CPU cores (Right-sized for 4-GPU WideResNet)
+#SBATCH --mem=128G                   # Request 128 GB RAM (Right-sized for 4-GPU WideResNet)
+#SBATCH --gpus=4                     # Request 4 GPU
+#SBATCH --reservation=software
+
+
+ml NRIS/GPU
+ml use /cluster/projects/hidden/jorn/easybuild-gpu/modules/all
+ml PyTorch/2.12.0
+
+# Resolve script and project directories independent of submit location.
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+
+# Ensure logs are always written under jobs/logs
+LOCAL_LOGS_DIR="${SCRIPT_DIR}/logs"
+mkdir -p "${LOCAL_LOGS_DIR}"
+
+# Training command
+TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train_ddp.py"
+TRAINING_ARGS=(
+  --model wideresnet
+  --dataset cifar100
+  --batch-size 1024
+  --epochs 100
+  --base-lr 0.04
+  --target-accuracy 0.95
+  --patience 2
+  --seed 42
+)
+
+# Change working directory to project root
+cd "${PROJECT_DIR}"
+
+# Check GPU availability
+echo "Checking GPU availability ..."
+python -c 'import torch; print(torch.cuda.is_available()); print(torch.cuda.device_count())'
+
+# Start GPU utilization monitoring in the background
+GPU_LOG_FILE="${LOCAL_LOGS_DIR}/multigpu.log"
+echo "Starting GPU utilization monitoring..."
+nvidia-smi --query-gpu=timestamp,index,name,utilization.gpu,utilization.memory,memory.total,memory.used --format=csv -l 5 > "${GPU_LOG_FILE}" &
+NVIDIA_MONITOR_PID=$!
+
+# Run the training script with torchrun 
+torchrun --standalone --nnodes="$SLURM_JOB_NUM_NODES" --nproc_per_node="$SLURM_GPUS_ON_NODE" "${TRAINING_SCRIPT}" "${TRAINING_ARGS[@]}"
+
+# Stop GPU utilization monitoring specifically by PID
+echo "Stopping GPU utilization monitoring..."
+kill "${NVIDIA_MONITOR_PID}"
