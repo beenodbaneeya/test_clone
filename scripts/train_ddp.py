@@ -17,6 +17,8 @@ from model import ViTModel, WideResNet
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for DDP training."""
+
     parser = argparse.ArgumentParser(
         description="Distributed Data Parallel training script.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -43,6 +45,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def ddp_setup() -> tuple[int, int, int, torch.device]:
+    """Initialize distributed process group and return rank/device metadata."""
+
     if not torch.cuda.is_available():
         raise RuntimeError("DDP training requires CUDA GPUs.")
 
@@ -56,6 +60,8 @@ def ddp_setup() -> tuple[int, int, int, torch.device]:
 
 
 def set_seed(seed: int, deterministic: bool, rank: int) -> None:
+    """Set rank-specific seed for reproducible but non-identical worker streams."""
+
     final_seed = seed + rank
     random.seed(final_seed)
     torch.manual_seed(final_seed)
@@ -73,6 +79,8 @@ def build_dataloaders(
     global_rank: int,
     world_size: int,
 ) -> tuple[DataLoader, DataLoader, DistributedSampler, int]:
+    """Build DDP-aware train/validation loaders and train sampler."""
+
     if args.batch_size % world_size != 0:
         raise ValueError(f"Global batch size ({args.batch_size}) must be divisible by world size ({world_size}).")
 
@@ -154,12 +162,16 @@ def build_dataloaders(
 
 
 def build_model(model_name: str, num_classes: int, device: torch.device) -> nn.Module:
+    """Instantiate and move the selected model to the local CUDA device."""
+
     if model_name == "wideresnet":
         return WideResNet(num_classes=num_classes).to(device)
     return ViTModel(num_classes=num_classes).to(device)
 
 
 def build_optimizer(args: argparse.Namespace, model: nn.Module) -> tuple[Optimizer, float]:
+    """Build optimizer with architecture-aware defaults."""
+
     if args.optimizer == "auto":
         if args.model == "wideresnet":
             learning_rate = args.base_lr if args.base_lr is not None else 0.1
@@ -193,6 +205,8 @@ def train_one_epoch(
     use_amp: bool,
     scaler: torch.amp.GradScaler | None,
 ) -> tuple[float, float, int]:
+    """Run one local-rank training epoch and return local metric sums."""
+
     model.train()
     local_correct = 0.0
     local_loss_sum = 0.0
@@ -230,6 +244,8 @@ def evaluate(
     device: torch.device,
     use_amp: bool,
 ) -> tuple[float, float, int]:
+    """Run one local-rank validation pass and return local metric sums."""
+
     model.eval()
     local_correct = 0.0
     local_loss_sum = 0.0
@@ -255,6 +271,8 @@ def evaluate(
 
 
 def all_reduce_metrics(correct: float, loss_sum: float, total: int, device: torch.device) -> tuple[float, float, int]:
+    """All-reduce local metric sums and compute global accuracy/loss."""
+
     metrics = torch.tensor([correct, loss_sum, float(total)], dtype=torch.float64, device=device)
     dist.all_reduce(metrics, op=dist.ReduceOp.SUM)
     global_correct, global_loss_sum, global_total = metrics.tolist()
@@ -265,6 +283,8 @@ def all_reduce_metrics(correct: float, loss_sum: float, total: int, device: torc
 
 
 def main_worker() -> None:
+    """Run end-to-end distributed training with synchronized reporting and stopping."""
+
     args = parse_args()
     local_rank, global_rank, world_size, device = ddp_setup()
 
@@ -322,6 +342,8 @@ def main_worker() -> None:
             val_correct, val_loss_sum, val_total = evaluate(model, val_loader, loss_fn, device, use_amp)
             val_acc, val_loss, _ = all_reduce_metrics(val_correct, val_loss_sum, val_total, device)
 
+            # Throughput uses max epoch time across ranks to reflect true
+            # synchronized step duration in distributed training.
             epoch_time_tensor = torch.tensor(epoch_time_local, dtype=torch.float64, device=device)
             dist.all_reduce(epoch_time_tensor, op=dist.ReduceOp.MAX)
             epoch_time = epoch_time_tensor.item()
@@ -344,6 +366,7 @@ def main_worker() -> None:
                 if should_stop:
                     print(f"Target accuracy reached. Early stopping after epoch {epoch + 1}.")
 
+            # Broadcast early-stop decision from rank 0 so all workers exit together.
             stop_tensor = torch.tensor(1 if should_stop else 0, device=device)
             dist.broadcast(stop_tensor, src=0)
             if stop_tensor.item() == 1:

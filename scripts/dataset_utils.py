@@ -1,3 +1,5 @@
+"""Dataset download/loading utilities for CIFAR-100 and Tiny-ImageNet."""
+
 import os
 import tarfile
 import zipfile
@@ -58,6 +60,8 @@ def _download_cifar100(data_dir: Path, verbose: bool = True) -> Path:
 
 
 def _data_dir_default() -> Path:
+    """Return the default dataset directory at <repo>/datasets."""
+
     repo_root = Path(__file__).resolve().parent.parent
     data_dir = repo_root / "datasets"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -72,11 +76,15 @@ def load_cifar100(
     verbose: bool = True,
 ) -> tuple[DataLoader, DataLoader]:
     """
-    Loads the CIFAR-100 dataset. Creates the dataset directory to store the dataset during runtime.
+    Load CIFAR-100 train/test data loaders.
+
+    Deep learning note:
+    Train transform uses stochastic augmentation (flip/crop) to improve
+    generalization, while test transform stays deterministic for fair metrics.
     """
     root = Path(data_dir).expanduser().resolve() if data_dir else _data_dir_default()
     _download_cifar100(root, verbose=verbose)
-    # Define transformations
+    # Train/eval transformations are intentionally different.
     transform_train = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.RandomCrop(32, padding=4),
@@ -87,12 +95,12 @@ def load_cifar100(
         transforms.ToTensor(),
         transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
     ])
-    # Load full datasets
+    # Build datasets from the downloaded files.
     train_set = torchvision.datasets.CIFAR100(
         root=str(root), download=False, train=True, transform=transform_train)
     test_set = torchvision.datasets.CIFAR100(
         root=str(root), download=False, train=False, transform=transform_test)
-    # Create the data loaders
+    # ``drop_last=True`` for train keeps a stable batch shape for optimization.
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=batch_size, drop_last=True, shuffle=(sampler is None), sampler=sampler, num_workers=num_workers, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(
@@ -139,13 +147,16 @@ def load_imagenet(
     verbose: bool = True,
 ) -> tuple[DataLoader, DataLoader]:
     """
-    Loads the Tiny-ImageNet dataset. Downloads the dataset if it is not already present.
+    Load Tiny-ImageNet train/validation data loaders.
+
+    Deep learning note:
+    Training uses random resized crops and flips; validation uses deterministic
+    resize+center-crop so validation accuracy/loss are comparable across epochs.
     """
     root = Path(data_dir).expanduser().resolve() if data_dir else _data_dir_default()
-    # Download Tiny-ImageNet if not already present
+    # Download only once and reuse across runs.
     tiny_imagenet_dir = _download_tiny_imagenet(root, verbose=verbose)
-    # Define transformations for training and validation.
-    # Validation is intentionally deterministic (no random transforms).
+    # Train/eval transformations are intentionally different.
     transform_train = transforms.Compose([
         transforms.RandomResizedCrop(224),
         transforms.RandomHorizontalFlip(),
@@ -158,18 +169,18 @@ def load_imagenet(
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
-    # Define paths for train and validation datasets
+    # Define paths for train and validation datasets.
     train_dir = tiny_imagenet_dir / "train"
     val_dir = tiny_imagenet_dir / "val"
-    # Fix Tiny-ImageNet validation directory structure if necessary
+    # Tiny-ImageNet validation set must be reshaped into ImageFolder layout.
     _fix_tiny_imagenet_val_structure(val_dir, verbose=verbose)
-    # Load datasets
+    # Build datasets.
     train_set = torchvision.datasets.ImageFolder(root=train_dir, transform=transform_train)
     test_set = torchvision.datasets.ImageFolder(root=val_dir, transform=transform_test)
-    # Apply DistributedSampler to the training Dataset
+    # In DDP mode, sampler shards training data by process/rank.
     if distributed and sampler is None:
         sampler = DistributedSampler(train_set)
-    # Create the data loaders
+    # Validation uses full set (drop_last=False) for correct metrics.
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=batch_size, drop_last=True, shuffle=(sampler is None), sampler=sampler, num_workers=num_workers, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(
@@ -178,12 +189,15 @@ def load_imagenet(
 
 
 def _fix_tiny_imagenet_val_structure(val_dir: Path, verbose: bool = True) -> None:
+    # This conversion is usually visible only on the first run. After images are
+    # moved into class directories, ``val/images`` no longer exists, so later
+    # runs return early and do not print the "Fixing ..." message.
     """
     Fixes the validation directory structure of Tiny-ImageNet to match ImageFolder format.
     """
     images_dir = val_dir / "images"
     if not images_dir.exists():
-        return  # Structure is already fixed
+        return
     if verbose:
         print(f"Fixing Tiny-ImageNet validation directory structure at {val_dir}...")
     with open(val_dir / "val_annotations.txt", "r") as f:
@@ -198,8 +212,6 @@ def _fix_tiny_imagenet_val_structure(val_dir: Path, verbose: bool = True) -> Non
     # Remove the old "images" directory and annotations file
     images_dir.rmdir()
     (val_dir / "val_annotations.txt").unlink()
-
-
 
 
 

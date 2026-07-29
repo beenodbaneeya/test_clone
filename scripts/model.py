@@ -1,9 +1,13 @@
+"""Model definitions for CNN and ViT scaling experiments."""
+
 import torch
 import torch.nn as nn
 from torchvision.models import ViT_B_16_Weights, vit_b_16
 
 
 class ConvBnReLU(nn.Module):
+    """Basic convolutional feature block used by WideResNet."""
+
     def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
         self.block = nn.Sequential(
@@ -17,6 +21,8 @@ class ConvBnReLU(nn.Module):
 
 
 class ResidualBlock(nn.Module):
+    """Residual block with optional channel projection on the shortcut path."""
+
     def __init__(self, in_channels: int, out_channels: int, dropout_p: float = 0.01) -> None:
         super().__init__()
         self.conv1 = ConvBnReLU(in_channels, out_channels)
@@ -44,6 +50,8 @@ class ResidualBlock(nn.Module):
 
 
 class WideResNet(nn.Module):
+    """Compact WideResNet-like CNN used for CIFAR-100 scaling tests."""
+
     def __init__(self, num_classes: int) -> None:
         super().__init__()
         channels = [3, 16, 160, 320, 640]
@@ -75,6 +83,8 @@ class WideResNet(nn.Module):
 
 
 class ViTModel(nn.Module):
+    """Vision Transformer wrapper with dataset-specific classification head."""
+
     def __init__(self, num_classes: int, pretrained: bool = True) -> None:
         super().__init__()
         weights = ViT_B_16_Weights.IMAGENET1K_V1 if pretrained else None

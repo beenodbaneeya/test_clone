@@ -19,6 +19,8 @@ from train_utils import train as train_one_epoch
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for single-GPU training."""
+
     parser = argparse.ArgumentParser(description="Train a model on a single GPU.")
     parser.add_argument(
         "--model",
@@ -88,6 +90,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_dataloaders(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader, int]:
+    """Create train/validation data loaders and return the number of classes."""
+
     if args.dataset == "cifar100":
         train_loader, test_loader = load_cifar100(
             batch_size=args.batch_size,
@@ -106,12 +110,16 @@ def build_dataloaders(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader,
 
 
 def build_model(model_name: str, num_classes: int, device: torch.device) -> nn.Module:
+    """Instantiate and move the selected model to the target device."""
+
     if model_name == "wideresnet":
         return WideResNet(num_classes=num_classes).to(device)
     return ViTModel(num_classes=num_classes).to(device)
 
 
 def build_optimizer(args: argparse.Namespace, model: nn.Module) -> Tuple[Optimizer, float]:
+    """Build optimizer with architecture-aware defaults."""
+
     if args.optimizer == "auto":
         if args.model == "wideresnet":
             learning_rate = args.base_lr if args.base_lr is not None else 0.1
@@ -137,6 +145,8 @@ def build_optimizer(args: argparse.Namespace, model: nn.Module) -> Tuple[Optimiz
 
 
 def loader_num_samples(loader: DataLoader) -> int:
+    """Return sample count from sampler when available, otherwise dataset length."""
+
     sampler: Any = getattr(loader, "sampler", None)
     if sampler is not None:
         try:
@@ -147,6 +157,8 @@ def loader_num_samples(loader: DataLoader) -> int:
 
 
 def set_seed(seed: int, deterministic: bool) -> None:
+    """Set Python/Torch random seeds and optional deterministic cuDNN behavior."""
+
     random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -160,6 +172,8 @@ def set_seed(seed: int, deterministic: bool) -> None:
 
 
 def main() -> None:
+    """Run end-to-end single-GPU training and report quality/speed metrics."""
+
     args = parse_args()
     set_seed(args.seed, args.deterministic)
     device = get_device()
@@ -209,6 +223,8 @@ def main() -> None:
             f"val_acc={val_accuracy:.4f}, throughput={throughput:.1f} img/s"
         )
 
+        # Early stopping uses a target validation accuracy sustained for
+        # ``patience`` consecutive epochs.
         if len(val_accuracies) >= args.patience and all(
             acc >= args.target_accuracy for acc in val_accuracies[-args.patience:]
         ):

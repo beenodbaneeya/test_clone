@@ -1,11 +1,17 @@
-# device_utils.py
+"""Utility helpers for selecting the compute device."""
+
 import torch
 
-def get_device():
+
+def get_device() -> torch.device:
     """
-    Determine the compute device (GPU or CPU).
+    Return the preferred compute device.
+
+    Deep learning note:
+    Training/inference must move both model and tensors to the same device.
+
     Returns:
-        torch.device: The device to use for the computations.
+        torch.device: ``cuda:0`` when CUDA is available, otherwise ``cpu``.
     """
 
     return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
