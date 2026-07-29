@@ -32,17 +32,8 @@ olivia_pytorch/
     multinode.sh
     logs/
   datasets/
-  docs/
-    script_readmes_record.md
-  AGENTS.md
 ```
 
-### Why `datasets/` and `jobs/logs/` are pre-created
-
-- `datasets/` exists so dataset download/extraction has a standard, expected location from first run.
-- `jobs/logs/` exists so Slurm output/error and GPU utilization logs always have a known target path.
-
-This means a new user can clone the repo, edit only scheduler/account settings, and submit jobs without creating directories manually.
 
 ## Quick Start
 
@@ -78,10 +69,6 @@ You can similarly run:
 - `scripts/device_utils.py`: compute device selection helper (CUDA vs CPU).
 - `scripts/model.py`: model definitions (WideResNet and ViT wrapper).
 
-### Other
-
-- `docs/script_readmes_record.md`: archived content from older per-script README files, kept as source material for consolidated documentation.
-- `AGENTS.md`: project-specific instructions used by coding agents.
 
 ## Notes on Scaling Interpretation
 
