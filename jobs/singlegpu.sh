@@ -12,6 +12,7 @@
 #SBATCH --gpus-per-node=1            # Request 1 GPU
 #SBATCH --reservation=software
 
+# This will be replaced by new module
 ml NRIS/GPU
 ml use /cluster/projects/nn9999k/jorn/easybuild-gpu/modules/all
 ml PyTorch/2.12.0
