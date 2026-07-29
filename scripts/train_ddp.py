@@ -357,7 +357,6 @@ def main_worker() -> None:
             total_images += global_train_total
             throughput = global_train_total / epoch_time if epoch_time > 0 else 0.0
 
-
             should_stop = False
             if global_rank == 0:
                 val_accuracies.append(val_acc)
