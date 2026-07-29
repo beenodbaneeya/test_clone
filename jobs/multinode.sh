@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=pytorch_multinode
-#SBATCH --account=hidden
+#SBATCH --account=<project_number>
 #SBATCH --output=logs/multinode_%j.out
 #SBATCH --error=logs/multinode_%j.err
 #SBATCH --time=00:30:00
@@ -14,7 +14,7 @@
 
 ml purge
 ml NRIS/GPU
-ml use /cluster/projects/hidden/jorn/easybuild-gpu/modules/all
+ml use /cluster/projects/nn9999k/jorn/easybuild-gpu/modules/all
 ml PyTorch/2.12.0
 
 

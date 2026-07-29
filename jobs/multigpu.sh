@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=pytorch_multigpu
-#SBATCH --account=hidden
+#SBATCH --account=<project_number>
 #SBATCH --output=logs/multigpu_%j.out
 #SBATCH --error=logs/multigpu_%j.err
 #SBATCH --time=00:30:00
@@ -14,7 +14,7 @@
 
 
 ml NRIS/GPU
-ml use /cluster/projects/hidden/jorn/easybuild-gpu/modules/all
+ml use /cluster/projects/nn9999k/jorn/easybuild-gpu/modules/all
 ml PyTorch/2.12.0
 
 # Get the absolute path to the project directory.

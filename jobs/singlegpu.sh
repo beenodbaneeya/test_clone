@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=pytorch_singlegpu
-#SBATCH --account=hidden
+#SBATCH --account=<project_number>
 #SBATCH --output=logs/singlegpu_%j.out
 #SBATCH --error=logs/singlegpu_%j.err
 #SBATCH --time=00:50:00
@@ -13,7 +13,7 @@
 #SBATCH --reservation=software
 
 ml NRIS/GPU
-ml use /cluster/projects/hidden/jorn/easybuild-gpu/modules/all
+ml use /cluster/projects/nn9999k/jorn/easybuild-gpu/modules/all
 ml PyTorch/2.12.0
 
 
