@@ -3,7 +3,6 @@
 import argparse
 import random
 import time
-from typing import Any, Tuple
 
 import torch
 import torch.nn as nn
@@ -20,8 +19,10 @@ from train_utils import train as train_one_epoch
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for single-GPU training."""
-
-    parser = argparse.ArgumentParser(description="Train a model on a single GPU.")
+    parser = argparse.ArgumentParser(
+        description="Train a model on a single GPU.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument(
         "--model",
         type=str,
@@ -89,9 +90,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_dataloaders(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader, int]:
+def build_dataloaders(args: argparse.Namespace) -> tuple[DataLoader, DataLoader, int]:
     """Create train/validation data loaders and return the number of classes."""
-
     if args.dataset == "cifar100":
         train_loader, test_loader = load_cifar100(
             batch_size=args.batch_size,
@@ -111,15 +111,13 @@ def build_dataloaders(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader,
 
 def build_model(model_name: str, num_classes: int, device: torch.device) -> nn.Module:
     """Instantiate and move the selected model to the target device."""
-
     if model_name == "wideresnet":
         return WideResNet(num_classes=num_classes).to(device)
     return ViTModel(num_classes=num_classes).to(device)
 
 
-def build_optimizer(args: argparse.Namespace, model: nn.Module) -> Tuple[Optimizer, float]:
+def build_optimizer(args: argparse.Namespace, model: nn.Module) -> tuple[Optimizer, float]:
     """Build optimizer with architecture-aware defaults."""
-
     if args.optimizer == "auto":
         if args.model == "wideresnet":
             learning_rate = args.base_lr if args.base_lr is not None else 0.1
@@ -144,21 +142,8 @@ def build_optimizer(args: argparse.Namespace, model: nn.Module) -> Tuple[Optimiz
     return optimizer, learning_rate
 
 
-def loader_num_samples(loader: DataLoader) -> int:
-    """Return sample count from sampler when available, otherwise dataset length."""
-
-    sampler: Any = getattr(loader, "sampler", None)
-    if sampler is not None:
-        try:
-            return len(sampler)
-        except TypeError:
-            pass
-    return len(loader.dataset)
-
-
 def set_seed(seed: int, deterministic: bool) -> None:
     """Set Python/Torch random seeds and optional deterministic cuDNN behavior."""
-
     random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -173,10 +158,10 @@ def set_seed(seed: int, deterministic: bool) -> None:
 
 def main() -> None:
     """Run end-to-end single-GPU training and report quality/speed metrics."""
-
     args = parse_args()
     set_seed(args.seed, args.deterministic)
     device = get_device()
+
     train_loader, test_loader, num_classes = build_dataloaders(args)
     model = build_model(args.model, num_classes, device)
     optimizer, learning_rate = build_optimizer(args, model)
@@ -207,24 +192,19 @@ def main() -> None:
         )
         epoch_time = time.time() - start_time
         total_time += epoch_time
-
-        if epoch_images <= 0:
-            epoch_images = loader_num_samples(train_loader)
         total_images += epoch_images
-        throughput = epoch_images / epoch_time
 
+        throughput = epoch_images / epoch_time if epoch_time > 0 else 0.0
         val_accuracy, val_loss = evaluate(model, test_loader, loss_fn, device, use_amp=use_amp)
         val_accuracies.append(val_accuracy)
 
         print(
             f"Epoch {epoch + 1}/{args.epochs}: "
             f"time={epoch_time:.3f}s, train_loss={train_loss:.4f}, train_acc={train_acc:.4f}, "
-            f"val_loss={val_loss:.4f}, "
-            f"val_acc={val_accuracy:.4f}, throughput={throughput:.1f} img/s"
+            f"val_loss={val_loss:.4f}, val_acc={val_accuracy:.4f}, throughput={throughput:.1f} img/s"
         )
 
-        # Early stopping uses a target validation accuracy sustained for
-        # ``patience`` consecutive epochs.
+        # Early stopping logic
         if len(val_accuracies) >= args.patience and all(
             acc >= args.target_accuracy for acc in val_accuracies[-args.patience:]
         ):
@@ -232,8 +212,9 @@ def main() -> None:
             break
 
     final_throughput = total_images / total_time if total_time > 0 else 0.0
-    print(f"\nTraining complete. Final val_acc: {val_accuracies[-1]:.4f}")
-    print(f"Total time: {total_time:.1f}s, final throughput: {final_throughput:.1f} img/s")
+    if val_accuracies:
+        print(f"\nTraining complete. Final val_acc: {val_accuracies[-1]:.4f}")
+        print(f"Total time: {total_time:.1f}s, final throughput: {final_throughput:.1f} img/s")
 
 
 if __name__ == "__main__":

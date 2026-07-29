@@ -4,6 +4,10 @@ import torch
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
+# Enable Tensor Cores for FP32 matmul ops on NVIDIA GH200 / modern GPUs
+if hasattr(torch, "set_float32_matmul_precision"):
+    torch.set_float32_matmul_precision("high")
+
 
 def train(
     model: torch.nn.Module,
@@ -55,8 +59,8 @@ def train(
         correct_labels += (predictions == labels).sum().item()
         loss_total += loss.detach().item() * batch_size
 
-    train_accuracy = correct_labels / total_labels
-    train_loss = loss_total / total_labels
+    train_accuracy = correct_labels / total_labels if total_labels > 0 else 0.0
+    train_loss = loss_total / total_labels if total_labels > 0 else 0.0
     return train_accuracy, train_loss, total_labels
 
 
@@ -100,6 +104,6 @@ def test(
             correct_labels += (predictions == labels).sum().item()
             loss_total += loss.detach().item() * batch_size
 
-    val_accuracy = correct_labels / total_labels
-    val_loss = loss_total / total_labels
+    val_accuracy = correct_labels / total_labels if total_labels > 0 else 0.0
+    val_loss = loss_total / total_labels if total_labels > 0 else 0.0
     return val_accuracy, val_loss

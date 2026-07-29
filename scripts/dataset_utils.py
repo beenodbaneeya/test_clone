@@ -13,15 +13,25 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+CIFAR100_MEAN = (0.5071, 0.4867, 0.4408)
+CIFAR100_STD = (0.2675, 0.2565, 0.2761)
+
 CIFAR100_ARCHIVE = "cifar-100-python.tar.gz"
 CIFAR100_DIRNAME = "cifar-100-python"
 
 
+def _data_dir_default() -> Path:
+    """Return default dataset directory at <repo>/datasets."""
+    repo_root = Path(__file__).resolve().parent.parent
+    data_dir = repo_root / "datasets"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
 def _download_cifar100(data_dir: Path, verbose: bool = True) -> Path:
-    """Download and extract CIFAR-100 if needed."""
+    """Download and extract CIFAR-100 dataset using requests to avoid cluster SSL issues."""
     cifar_dir = data_dir / CIFAR100_DIRNAME
     if cifar_dir.exists():
         if verbose:
@@ -48,7 +58,7 @@ def _download_cifar100(data_dir: Path, verbose: bool = True) -> Path:
             archive_path.unlink()
         raise RuntimeError(
             f"Failed to download CIFAR-100: {error}\n"
-            "Please check network connection or stage the dataset manually in the datasets directory."
+            "Please check network connection or stage dataset manually in datasets directory."
         ) from error
 
     if verbose:
@@ -59,15 +69,6 @@ def _download_cifar100(data_dir: Path, verbose: bool = True) -> Path:
     return cifar_dir
 
 
-def _data_dir_default() -> Path:
-    """Return the default dataset directory at <repo>/datasets."""
-
-    repo_root = Path(__file__).resolve().parent.parent
-    data_dir = repo_root / "datasets"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir
-
-
 def load_cifar100(
     batch_size: int,
     num_workers: int = 0,
@@ -75,67 +76,98 @@ def load_cifar100(
     data_dir: Optional[str] = None,
     verbose: bool = True,
 ) -> tuple[DataLoader, DataLoader]:
-    """
-    Load CIFAR-100 train/test data loaders.
-
-    Deep learning note:
-    Train transform uses stochastic augmentation (flip/crop) to improve
-    generalization, while test transform stays deterministic for fair metrics.
-    """
+    """Load CIFAR-100 train and test data loaders."""
     root = Path(data_dir).expanduser().resolve() if data_dir else _data_dir_default()
     _download_cifar100(root, verbose=verbose)
-    # Train/eval transformations are intentionally different.
+
     transform_train = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.RandomCrop(32, padding=4),
         transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+        transforms.Normalize(CIFAR100_MEAN, CIFAR100_STD),
     ])
     transform_test = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+        transforms.Normalize(CIFAR100_MEAN, CIFAR100_STD),
     ])
-    # Build datasets from the downloaded files.
+
     train_set = torchvision.datasets.CIFAR100(
-        root=str(root), download=False, train=True, transform=transform_train)
+        root=str(root), download=False, train=True, transform=transform_train
+    )
     test_set = torchvision.datasets.CIFAR100(
-        root=str(root), download=False, train=False, transform=transform_test)
-    # ``drop_last=True`` for train keeps a stable batch shape for optimization.
-    train_loader = torch.utils.data.DataLoader(
-        train_set, batch_size=batch_size, drop_last=True, shuffle=(sampler is None), sampler=sampler, num_workers=num_workers, pin_memory=True)
-    test_loader = torch.utils.data.DataLoader(
-        test_set, batch_size=batch_size, drop_last=False, shuffle=False, num_workers=num_workers, pin_memory=True)
+        root=str(root), download=False, train=False, transform=transform_test
+    )
+
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=(sampler is None),
+        sampler=sampler,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=True,
+    )
+    test_loader = DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=False,
+    )
     return train_loader, test_loader
 
 
 def _download_tiny_imagenet(data_dir: Path, verbose: bool = True) -> Path:
-    """
-    Downloads and extracts the Tiny-ImageNet dataset if not already present.
-    """
+    """Download and extract Tiny-ImageNet dataset if not present."""
     tiny_imagenet_url = "http://cs231n.stanford.edu/tiny-imagenet-200.zip"
     tiny_imagenet_zip = data_dir / "tiny-imagenet-200.zip"
     tiny_imagenet_dir = data_dir / "tiny-imagenet-200"
-    # Check if the dataset is already downloaded and extracted
+
     if tiny_imagenet_dir.exists():
         if verbose:
             print(f"Tiny-ImageNet dataset already exists at {tiny_imagenet_dir}. Skipping download.")
         return tiny_imagenet_dir
-    # Download the dataset
+
     if verbose:
         print(f"Downloading Tiny-ImageNet dataset from {tiny_imagenet_url}...")
-    response = requests.get(tiny_imagenet_url, stream=True)
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(tiny_imagenet_url, headers=headers, stream=True, timeout=60)
+    response.raise_for_status()
+
     with open(tiny_imagenet_zip, "wb") as f:
-        for chunk in response.iter_content(chunk_size=1024):
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
             if chunk:
                 f.write(chunk)
-    # Extract the dataset
+
     if verbose:
         print(f"Extracting Tiny-ImageNet dataset to {data_dir}...")
     with zipfile.ZipFile(tiny_imagenet_zip, "r") as zip_ref:
         zip_ref.extractall(data_dir)
-    # Remove the zip file after extraction
+
     os.remove(tiny_imagenet_zip)
     return tiny_imagenet_dir
+
+
+def _fix_tiny_imagenet_val_structure(val_dir: Path, verbose: bool = True) -> None:
+    """Reorganize Tiny-ImageNet validation directory into ImageFolder format."""
+    images_dir = val_dir / "images"
+    if not images_dir.exists():
+        return
+
+    if verbose:
+        print(f"Fixing Tiny-ImageNet validation directory structure at {val_dir}...")
+    with open(val_dir / "val_annotations.txt", "r") as f:
+        for line in f:
+            parts = line.strip().split("\t")
+            img_name, class_name = parts[0], parts[1]
+            class_dir = val_dir / class_name
+            class_dir.mkdir(exist_ok=True)
+            (images_dir / img_name).rename(class_dir / img_name)
+
+    images_dir.rmdir()
+    (val_dir / "val_annotations.txt").unlink(missing_ok=True)
+
 
 
 def load_imagenet(
@@ -146,17 +178,12 @@ def load_imagenet(
     distributed: bool = False,
     verbose: bool = True,
 ) -> tuple[DataLoader, DataLoader]:
-    """
-    Load Tiny-ImageNet train/validation data loaders.
-
-    Deep learning note:
-    Training uses random resized crops and flips; validation uses deterministic
-    resize+center-crop so validation accuracy/loss are comparable across epochs.
-    """
+    """Load Tiny-ImageNet train and validation data loaders."""
     root = Path(data_dir).expanduser().resolve() if data_dir else _data_dir_default()
-    # Download only once and reuse across runs.
+
     tiny_imagenet_dir = _download_tiny_imagenet(root, verbose=verbose)
-    # Train/eval transformations are intentionally different.
+    _fix_tiny_imagenet_val_structure(tiny_imagenet_dir / "val", verbose=verbose)
+
     transform_train = transforms.Compose([
         transforms.RandomResizedCrop(224),
         transforms.RandomHorizontalFlip(),
@@ -169,50 +196,28 @@ def load_imagenet(
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
-    # Define paths for train and validation datasets.
-    train_dir = tiny_imagenet_dir / "train"
-    val_dir = tiny_imagenet_dir / "val"
-    # Tiny-ImageNet validation set must be reshaped into ImageFolder layout.
-    _fix_tiny_imagenet_val_structure(val_dir, verbose=verbose)
-    # Build datasets.
-    train_set = torchvision.datasets.ImageFolder(root=train_dir, transform=transform_train)
-    test_set = torchvision.datasets.ImageFolder(root=val_dir, transform=transform_test)
-    # In DDP mode, sampler shards training data by process/rank.
+
+    train_set = torchvision.datasets.ImageFolder(root=tiny_imagenet_dir / "train", transform=transform_train)
+    test_set = torchvision.datasets.ImageFolder(root=tiny_imagenet_dir / "val", transform=transform_test)
+
     if distributed and sampler is None:
         sampler = DistributedSampler(train_set)
-    # Validation uses full set (drop_last=False) for correct metrics.
-    train_loader = torch.utils.data.DataLoader(
-        train_set, batch_size=batch_size, drop_last=True, shuffle=(sampler is None), sampler=sampler, num_workers=num_workers, pin_memory=True)
-    test_loader = torch.utils.data.DataLoader(
-        test_set, batch_size=batch_size, drop_last=False, shuffle=False, num_workers=num_workers, pin_memory=True)
+
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=(sampler is None),
+        sampler=sampler,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=True,
+    )
+    test_loader = DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=False,
+    )
     return train_loader, test_loader
-
-
-def _fix_tiny_imagenet_val_structure(val_dir: Path, verbose: bool = True) -> None:
-    # This conversion is usually visible only on the first run. After images are
-    # moved into class directories, ``val/images`` no longer exists, so later
-    # runs return early and do not print the "Fixing ..." message.
-    """
-    Fixes the validation directory structure of Tiny-ImageNet to match ImageFolder format.
-    """
-    images_dir = val_dir / "images"
-    if not images_dir.exists():
-        return
-    if verbose:
-        print(f"Fixing Tiny-ImageNet validation directory structure at {val_dir}...")
-    with open(val_dir / "val_annotations.txt", "r") as f:
-        annotations = f.readlines()
-    for line in annotations:
-        parts = line.strip().split("\t")
-        img_name, class_name = parts[0], parts[1]
-        class_dir = val_dir / class_name
-        class_dir.mkdir(exist_ok=True)
-        img_path = images_dir / img_name
-        img_path.rename(class_dir / img_name)
-    # Remove the old "images" directory and annotations file
-    images_dir.rmdir()
-    (val_dir / "val_annotations.txt").unlink()
-
-
-
-

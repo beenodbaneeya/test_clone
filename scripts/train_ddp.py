@@ -12,6 +12,9 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
+# ENABLE GH200 TENSOR CORES FOR FP32 MATH
+torch.set_float32_matmul_precision("high")
+
 from dataset_utils import load_cifar100, load_imagenet
 from model import ViTModel, WideResNet
 
@@ -305,12 +308,14 @@ def main_worker() -> None:
             per_gpu_batch_size = args.batch_size // world_size
             print(
                 f"Training {args.model} on {args.dataset} with DDP | "
-                f"world_size={world_size}, nodes={nodes}, gpus_per_node={gpus_per_node}"
+                f"world_size={world_size}, nodes={nodes}, gpus_per_node={gpus_per_node}",
+                flush=True,
             )
             print(
                 f"global_batch_size={args.batch_size}, per_gpu_batch_size={per_gpu_batch_size}, "
                 f"lr={learning_rate}, optimizer={optimizer.__class__.__name__}, "
-                f"amp={use_amp}, seed={args.seed}, deterministic={args.deterministic}"
+                f"amp={use_amp}, seed={args.seed}, deterministic={args.deterministic}",
+                flush=True,
             )
 
         val_accuracies: list[float] = []
@@ -352,19 +357,21 @@ def main_worker() -> None:
             total_images += global_train_total
             throughput = global_train_total / epoch_time if epoch_time > 0 else 0.0
 
+
             should_stop = False
             if global_rank == 0:
                 val_accuracies.append(val_acc)
                 print(
                     f"Epoch {epoch + 1}/{args.epochs}: "
                     f"time={epoch_time:.3f}s, train_loss={train_loss:.4f}, train_acc={train_acc:.4f}, "
-                    f"val_loss={val_loss:.4f}, val_acc={val_acc:.4f}, throughput={throughput:.1f} img/s"
+                    f"val_loss={val_loss:.4f}, val_acc={val_acc:.4f}, throughput={throughput:.1f} img/s",
+                    flush=True,
                 )
                 should_stop = len(val_accuracies) >= args.patience and all(
                     acc >= args.target_accuracy for acc in val_accuracies[-args.patience:]
                 )
                 if should_stop:
-                    print(f"Target accuracy reached. Early stopping after epoch {epoch + 1}.")
+                    print(f"Target accuracy reached. Early stopping after epoch {epoch + 1}.", flush=True)
 
             # Broadcast early-stop decision from rank 0 so all workers exit together.
             stop_tensor = torch.tensor(1 if should_stop else 0, device=device)
@@ -374,11 +381,11 @@ def main_worker() -> None:
 
         if global_rank == 0:
             final_throughput = total_images / total_time if total_time > 0 else 0.0
-            print("\nTraining Summary:")
-            print(f"Total training time: {total_time:.3f} seconds")
-            print(f"Throughput: {final_throughput:.3f} images/second")
-            print(f"Total GPUs used: {world_size}")
-            print("Training completed successfully.")
+            print("\nTraining Summary:", flush=True)
+            print(f"Total training time: {total_time:.3f} seconds", flush=True)
+            print(f"Throughput: {final_throughput:.3f} images/second", flush=True)
+            print(f"Total GPUs used: {world_size}", flush=True)
+            print("Training completed successfully.", flush=True)
     finally:
         if dist.is_initialized():
             dist.destroy_process_group()
