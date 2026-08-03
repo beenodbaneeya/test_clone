@@ -1,6 +1,6 @@
 # PyTorch Scaling Test on Olivia
 
-This project is a minimal starter for users who want to run quick scaling checks on **Olivia** with PyTorch.
+This is a minimal deep learning project for users who want to run quick scaling checks on **Olivia** with PyTorch.
 
 The main goal is to verify that deep learning training scales when moving from:
 
@@ -13,7 +13,7 @@ To keep the workflow simple and practical, this repo uses two model/data regimes
 - **WideResNet on CIFAR-100** for fast scaling runs (small images, shorter iteration time),
 - **ViT on Tiny-ImageNet** in the training scripts for a larger vision workload.
 
-In deep learning terms, these runs demonstrate **data-parallel training**: each GPU processes a different mini-batch shard, gradients are synchronized, and training throughput should increase as resources increase.
+In deep learning perspective, these runs demonstrate **data-parallel training**: each GPU processes a different mini-batch shard, gradients are synchronized, and training throughput should increase as resources increase.
 
 ## Project Layout
 
@@ -38,7 +38,7 @@ olivia_pytorch/
 ## Quick Start
 
 1. Clone the repository.
-2. Edit `#SBATCH --account=...` (and other site-specific directives if needed) in the job script you want to run.
+2. Edit `#SBATCH --account=...` (which is the only change that you should make)
 3. Submit from the `jobs/` directory:
 
 ```bash
@@ -64,7 +64,7 @@ You can similarly run:
 
 - `scripts/train.py`: single-GPU training entry point (argument parsing, setup, train/validate loop, throughput reporting).
 - `scripts/train_ddp.py`: distributed training entry point using PyTorch DDP (`torchrun`, rank setup, global metric reduction).
-- `scripts/train_utils.py`: core train/eval loop functions used by training scripts.
+- `scripts/train_utils.py`: core train/eval loop functions used by training script(train.py).
 - `scripts/dataset_utils.py`: dataset download/loading and transforms for CIFAR-100 and Tiny-ImageNet.
 - `scripts/device_utils.py`: compute device selection helper (CUDA vs CPU).
 - `scripts/model.py`: model definitions (WideResNet and ViT wrapper).
