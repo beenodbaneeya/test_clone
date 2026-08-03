@@ -4,13 +4,12 @@
 #SBATCH --output=logs/multigpu_%j.out
 #SBATCH --error=logs/multigpu_%j.err
 #SBATCH --time=00:30:00
-#SBATCH --partition=accel           # GPU partition
+#SBATCH --partition=accel            # GPU partition
 #SBATCH --nodes=1                    # Single compute node
 #SBATCH --ntasks-per-node=1          # One task (process) on the node
-#SBATCH --cpus-per-task=40           # Reserve 40 CPU cores (Right-sized for 4-GPU WideResNet)
-#SBATCH --mem=128G                   # Request 128 GB RAM (Right-sized for 4-GPU WideResNet)
+#SBATCH --cpus-per-task=40           # Reserve 40 CPU cores 
+#SBATCH --mem=128G                   # Request 128 GB RAM
 #SBATCH --gpus=4                     # Request 4 GPU
-#SBATCH --reservation=software
 
 
 ml NRIS/GPU

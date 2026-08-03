@@ -157,7 +157,7 @@ def set_seed(seed: int, deterministic: bool) -> None:
 
 
 def main() -> None:
-    """Run end-to-end single-GPU training and report quality/speed metrics."""
+    """Run single-GPU training and print speed metrics."""
     args = parse_args()
     set_seed(args.seed, args.deterministic)
     device = get_device()

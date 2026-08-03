@@ -7,10 +7,9 @@
 #SBATCH --partition=accel           # GPU partition
 #SBATCH --nodes=2                    # Request 2 compute nodes
 #SBATCH --ntasks-per-node=1          # One task (process) on the node
-#SBATCH --cpus-per-task=40           # Reserve 40 CPU cores (Right-sized for multi-node WideResNet)
-#SBATCH --mem=128G                   # Request 128 GB RAM (Right-sized for multi-node WideResNet)
+#SBATCH --cpus-per-task=40           # Reserve 40 CPU cores
+#SBATCH --mem=128G                   # Request 128 GB RAM
 #SBATCH --gpus-per-node=4            # Number of GPUs per node
-#SBATCH --reservation=software
 
 ml purge
 ml NRIS/GPU

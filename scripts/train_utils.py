@@ -1,10 +1,10 @@
-"""Shared train/eval loops used by single-GPU and DDP entry points."""
+"""Shared train/eval loops used by single-GPU."""
 
 import torch
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
-# Enable Tensor Cores for FP32 matmul ops on NVIDIA GH200 / modern GPUs
+# Enable Tensor Cores for FP32 matmul ops on NVIDIA GH200
 if hasattr(torch, "set_float32_matmul_precision"):
     torch.set_float32_matmul_precision("high")
 
@@ -20,11 +20,6 @@ def train(
 ) -> tuple[float, float, int]:
     """
     Train the model for one epoch on a single device.
-
-    Deep learning note:
-    This loop performs forward pass, loss computation, backpropagation, and
-    optimizer updates. Metrics are tracked as sample-weighted values so epoch
-    loss/accuracy remain correct even when final batches differ in size.
 
     Returns:
         tuple[float, float, int]: Train accuracy, train loss, and number of images processed.
@@ -73,11 +68,6 @@ def test(
 ) -> tuple[float, float]:
     """
     Evaluate the model on the validation dataset.
-
-    Deep learning note:
-    Evaluation runs in ``model.eval()`` + ``torch.no_grad()`` mode to disable
-    training-time behavior (e.g., dropout randomness) and to avoid gradient
-    tracking overhead.
 
     Returns:
         tuple[float, float]: Validation accuracy and validation loss.

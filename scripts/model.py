@@ -1,4 +1,4 @@
-"""Model definitions for CNN and ViT scaling experiments."""
+"""Model definitions for CNN and ViT."""
 
 import torch
 import torch.nn as nn
@@ -42,7 +42,7 @@ class ResidualBlock(nn.Module):
 
 
 class WideResNet(nn.Module):
-    """Compact WideResNet-like CNN for CIFAR-100 scaling experiments."""
+    """Compact WideResNet  CNN for CIFAR-100"""
 
     def __init__(self, num_classes: int) -> None:
         super().__init__()

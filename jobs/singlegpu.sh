@@ -7,10 +7,9 @@
 #SBATCH --partition=accel           # GPU partition
 #SBATCH --nodes=1                    # Single compute node
 #SBATCH --ntasks-per-node=1          # One task (process) on the node
-#SBATCH --cpus-per-task=16           # Reserve 16 CPU cores (Right-sized for WideResNet + CIFAR-100)
-#SBATCH --mem=48G                    # Request 48 GB RAM (Right-sized for WideResNet + CIFAR-100)
+#SBATCH --cpus-per-task=16           # Reserve 16 CPU cores (WideResNet + CIFAR-100)
+#SBATCH --mem=48G                    # Request 48 GB RAM (WideResNet + CIFAR-100)
 #SBATCH --gpus-per-node=1            # Request 1 GPU
-#SBATCH --reservation=software
 
 # This will be replaced by new module
 ml NRIS/GPU

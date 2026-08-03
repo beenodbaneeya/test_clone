@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def ddp_setup() -> tuple[int, int, int, torch.device]:
-    """Initialize distributed process group and return rank/device metadata."""
+    """Initialize distributed process group and return rank/device metadata"""
 
     if not torch.cuda.is_available():
         raise RuntimeError("DDP training requires CUDA GPUs.")
@@ -82,7 +82,7 @@ def build_dataloaders(
     global_rank: int,
     world_size: int,
 ) -> tuple[DataLoader, DataLoader, DistributedSampler, int]:
-    """Build DDP-aware train/validation loaders and train sampler."""
+    """Build DDP aware train/validation loaders and train sampler."""
 
     if args.batch_size % world_size != 0:
         raise ValueError(f"Global batch size ({args.batch_size}) must be divisible by world size ({world_size}).")
@@ -173,7 +173,7 @@ def build_model(model_name: str, num_classes: int, device: torch.device) -> nn.M
 
 
 def build_optimizer(args: argparse.Namespace, model: nn.Module) -> tuple[Optimizer, float]:
-    """Build optimizer with architecture-aware defaults."""
+    """Build optimizer with architecture aware defaults."""
 
     if args.optimizer == "auto":
         if args.model == "wideresnet":
@@ -286,7 +286,7 @@ def all_reduce_metrics(correct: float, loss_sum: float, total: int, device: torc
 
 
 def main_worker() -> None:
-    """Run end-to-end distributed training with synchronized reporting and stopping."""
+    """Run distributed training with synchronized reporting and stopping."""
 
     args = parse_args()
     local_rank, global_rank, world_size, device = ddp_setup()

@@ -58,7 +58,7 @@ def _download_cifar100(data_dir: Path, verbose: bool = True) -> Path:
             archive_path.unlink()
         raise RuntimeError(
             f"Failed to download CIFAR-100: {error}\n"
-            "Please check network connection or stage dataset manually in datasets directory."
+            "Please check network connection"
         ) from error
 
     if verbose:
@@ -90,7 +90,8 @@ def load_cifar100(
         transforms.ToTensor(),
         transforms.Normalize(CIFAR100_MEAN, CIFAR100_STD),
     ])
-
+    
+    """We still use torchvision to read those pre-extracted files."""
     train_set = torchvision.datasets.CIFAR100(
         root=str(root), download=False, train=True, transform=transform_train
     )
