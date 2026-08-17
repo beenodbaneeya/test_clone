@@ -20,11 +20,15 @@ ml PyTorch/2.12.0
 # Get the absolute path to the project directory.
 PROJECT_DIR=$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)
 
-# Training command
+# Training command for wideresnet on CIFAR-100 dataset with DDP (Distributed Data Parallel)
 TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train_ddp.py --model wideresnet --dataset cifar100 --epochs 100 --batch-size 2048 --base-lr 0.02 --target-accuracy 0.95 --patience 2 --seed 42"
 
-export NCCL_DEBUG=INFO
-export NCCL_DEBUG_SUBSYS=INIT,NET
+# Training command for ViT on Tiny-ImageNet dataset with DDP (Distributed Data Parallel)
+# TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train_ddp.py --model vit --dataset tiny-imagenet --epochs 100 --batch-size 2048 --optimizer adamw --base-lr 0.00015 --target-accuracy 0.95 --patience 2 --seed 42 --num-workers 8 --amp"
+
+# Optional: Enable NCCL debugging for troubleshooting (uncomment if needed)
+# export NCCL_DEBUG=INFO
+# export NCCL_DEBUG_SUBSYS=INIT,NET
 
 
 # Get head node IP

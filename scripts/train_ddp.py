@@ -1,3 +1,5 @@
+"""Distributed Data Parallel (DDP) training script for PyTorch."""
+
 import argparse
 import os
 import random
@@ -12,8 +14,9 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-# ENABLE GH200 TENSOR CORES FOR FP32 MATH
-torch.set_float32_matmul_precision("high")
+# Enable GH200 Tensor Cores for FP32 math operations
+if hasattr(torch, "set_float32_matmul_precision"):
+    torch.set_float32_matmul_precision("high")
 
 from dataset_utils import load_cifar100, load_imagenet
 from model import ViTModel, WideResNet
@@ -21,20 +24,19 @@ from model import ViTModel, WideResNet
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for DDP training."""
-
     parser = argparse.ArgumentParser(
         description="Distributed Data Parallel training script.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--model", type=str, choices=["wideresnet", "vit"], default="vit")
-    parser.add_argument("--dataset", type=str, choices=["cifar100", "tiny-imagenet"], default="tiny-imagenet")
-    parser.add_argument("--batch-size", type=int, default=512, help="Global batch size across all GPUs")
-    parser.add_argument("--epochs", type=int, default=5, help="Number of epochs to train")
+    parser.add_argument("--model", type=str, choices=["wideresnet", "vit"], default="wideresnet")
+    parser.add_argument("--dataset", type=str, choices=["cifar100", "tiny-imagenet"], default="cifar100")
+    parser.add_argument("--batch-size", type=int, default=2048, help="Global batch size across all GPUs")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
     parser.add_argument("--base-lr", type=float, default=None, help="Learning rate override")
     parser.add_argument("--optimizer", type=str, choices=["auto", "sgd", "adam", "adamw"], default="auto")
-    parser.add_argument("--target-accuracy", type=float, default=0.85, help="Early stopping target validation accuracy")
+    parser.add_argument("--target-accuracy", type=float, default=0.95, help="Early stopping target validation accuracy")
     parser.add_argument("--patience", type=int, default=2, help="Consecutive epochs required for early stopping")
-    parser.add_argument("--num-workers", type=int, default=8, help="DataLoader workers per process")
+    parser.add_argument("--num-workers", type=int, default=4, help="DataLoader workers per process")
     parser.add_argument(
         "--data-dir",
         type=str,
@@ -48,23 +50,25 @@ def parse_args() -> argparse.Namespace:
 
 
 def ddp_setup() -> tuple[int, int, int, torch.device]:
-    """Initialize distributed process group and return rank/device metadata"""
-
+    """Initialize distributed process group cleanly from torchrun environment variables."""
     if not torch.cuda.is_available():
         raise RuntimeError("DDP training requires CUDA GPUs.")
 
     local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
-    dist.init_process_group(backend="nccl", device_id=torch.device(f"cuda:{local_rank}"))
     global_rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
+
+    # Explicitly set local CUDA device for this process
+    torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
+
+    # Standard clean initialization without forcing early device_id locking
+    dist.init_process_group(backend="nccl")
     return local_rank, global_rank, world_size, device
 
 
 def set_seed(seed: int, deterministic: bool, rank: int) -> None:
-    """Set rank-specific seed for reproducible but non-identical worker streams."""
-
+    """Set rank-specific seed for reproducible worker streams."""
     final_seed = seed + rank
     random.seed(final_seed)
     torch.manual_seed(final_seed)
@@ -82,45 +86,25 @@ def build_dataloaders(
     global_rank: int,
     world_size: int,
 ) -> tuple[DataLoader, DataLoader, DistributedSampler, int]:
-    """Build DDP aware train/validation loaders and train sampler."""
-
+    """Build DDP-aware train/validation loaders safely from local datasets."""
     if args.batch_size % world_size != 0:
         raise ValueError(f"Global batch size ({args.batch_size}) must be divisible by world size ({world_size}).")
 
     per_gpu_batch_size = args.batch_size // world_size
 
-    # Prepare datasets once before all ranks build loaders to avoid first-run download races.
-    if global_rank == 0:
-        if args.dataset == "cifar100":
-            load_cifar100(batch_size=1, num_workers=0, sampler=None, data_dir=args.data_dir, verbose=True)
-        else:
-            load_imagenet(
-                batch_size=1,
-                num_workers=0,
-                sampler=None,
-                data_dir=args.data_dir,
-                distributed=False,
-                verbose=True,
-            )
-    dist.barrier(device_ids=[torch.cuda.current_device()])
-
     if args.dataset == "cifar100":
         base_train_loader, base_val_loader = load_cifar100(
             batch_size=per_gpu_batch_size,
             num_workers=args.num_workers,
-            sampler=None,
             data_dir=args.data_dir,
-            verbose=False,
         )
         num_classes = 100
     else:
         base_train_loader, base_val_loader = load_imagenet(
             batch_size=per_gpu_batch_size,
             num_workers=args.num_workers,
-            sampler=None,
             data_dir=args.data_dir,
             distributed=False,
-            verbose=False,
         )
         num_classes = 200
 
@@ -142,13 +126,15 @@ def build_dataloaders(
         drop_last=False,
     )
 
+    use_pin_memory = torch.cuda.is_available()
+
     train_loader = DataLoader(
         train_set,
         batch_size=per_gpu_batch_size,
         shuffle=False,
         sampler=train_sampler,
         num_workers=args.num_workers,
-        pin_memory=True,
+        pin_memory=use_pin_memory,
         drop_last=True,
     )
     val_loader = DataLoader(
@@ -157,7 +143,7 @@ def build_dataloaders(
         shuffle=False,
         sampler=val_sampler,
         num_workers=args.num_workers,
-        pin_memory=True,
+        pin_memory=use_pin_memory,
         drop_last=False,
     )
 
@@ -166,7 +152,6 @@ def build_dataloaders(
 
 def build_model(model_name: str, num_classes: int, device: torch.device) -> nn.Module:
     """Instantiate and move the selected model to the local CUDA device."""
-
     if model_name == "wideresnet":
         return WideResNet(num_classes=num_classes).to(device)
     return ViTModel(num_classes=num_classes).to(device)
@@ -174,7 +159,6 @@ def build_model(model_name: str, num_classes: int, device: torch.device) -> nn.M
 
 def build_optimizer(args: argparse.Namespace, model: nn.Module) -> tuple[Optimizer, float]:
     """Build optimizer with architecture aware defaults."""
-
     if args.optimizer == "auto":
         if args.model == "wideresnet":
             learning_rate = args.base_lr if args.base_lr is not None else 0.1
@@ -191,11 +175,11 @@ def build_optimizer(args: argparse.Namespace, model: nn.Module) -> tuple[Optimiz
 
     learning_rate = args.base_lr if args.base_lr is not None else 1e-3
     if args.optimizer == "sgd":
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=5e-4)
     elif args.optimizer == "adam":
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     else:
-        optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
+        optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     return optimizer, learning_rate
 
 
@@ -209,14 +193,14 @@ def train_one_epoch(
     scaler: torch.amp.GradScaler | None,
 ) -> tuple[float, float, int]:
     """Run one local-rank training epoch and return local metric sums."""
-
     model.train()
     local_correct = 0.0
     local_loss_sum = 0.0
     local_total = 0
 
     for images, labels in train_loader:
-        images, labels = images.to(device, non_blocking=True), labels.to(device, non_blocking=True)
+        images = images.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
 
         if use_amp and scaler is not None:
@@ -248,7 +232,6 @@ def evaluate(
     use_amp: bool,
 ) -> tuple[float, float, int]:
     """Run one local-rank validation pass and return local metric sums."""
-
     model.eval()
     local_correct = 0.0
     local_loss_sum = 0.0
@@ -256,7 +239,8 @@ def evaluate(
 
     with torch.no_grad():
         for images, labels in val_loader:
-            images, labels = images.to(device, non_blocking=True), labels.to(device, non_blocking=True)
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
             if use_amp:
                 with torch.amp.autocast(device_type="cuda"):
                     outputs = model(images)
@@ -274,8 +258,7 @@ def evaluate(
 
 
 def all_reduce_metrics(correct: float, loss_sum: float, total: int, device: torch.device) -> tuple[float, float, int]:
-    """All-reduce local metric sums and compute global accuracy/loss."""
-
+    """All-reduce local metric sums across all GPUs and compute global accuracy/loss."""
     metrics = torch.tensor([correct, loss_sum, float(total)], dtype=torch.float64, device=device)
     dist.all_reduce(metrics, op=dist.ReduceOp.SUM)
     global_correct, global_loss_sum, global_total = metrics.tolist()
@@ -287,7 +270,6 @@ def all_reduce_metrics(correct: float, loss_sum: float, total: int, device: torc
 
 def main_worker() -> None:
     """Run distributed training with synchronized reporting and stopping."""
-
     args = parse_args()
     local_rank, global_rank, world_size, device = ddp_setup()
 
@@ -307,7 +289,7 @@ def main_worker() -> None:
             nodes = max(1, world_size // gpus_per_node)
             per_gpu_batch_size = args.batch_size // world_size
             print(
-                f"Training {args.model} on {args.dataset} with DDP | "
+                f"Training {args.model} on {args.dataset} with PyTorch DDP | "
                 f"world_size={world_size}, nodes={nodes}, gpus_per_node={gpus_per_node}",
                 flush=True,
             )
@@ -347,8 +329,7 @@ def main_worker() -> None:
             val_correct, val_loss_sum, val_total = evaluate(model, val_loader, loss_fn, device, use_amp)
             val_acc, val_loss, _ = all_reduce_metrics(val_correct, val_loss_sum, val_total, device)
 
-            # Throughput uses max epoch time across ranks to reflect true
-            # synchronized step duration in distributed training.
+            # Max epoch time across ranks reflects true synchronized step duration
             epoch_time_tensor = torch.tensor(epoch_time_local, dtype=torch.float64, device=device)
             dist.all_reduce(epoch_time_tensor, op=dist.ReduceOp.MAX)
             epoch_time = epoch_time_tensor.item()
@@ -367,12 +348,12 @@ def main_worker() -> None:
                     flush=True,
                 )
                 should_stop = len(val_accuracies) >= args.patience and all(
-                    acc >= args.target_accuracy for acc in val_accuracies[-args.patience:]
+                    acc >= args.target_accuracy for acc in val_accuracies[-args.patience :]
                 )
                 if should_stop:
                     print(f"Target accuracy reached. Early stopping after epoch {epoch + 1}.", flush=True)
 
-            # Broadcast early-stop decision from rank 0 so all workers exit together.
+            # Synchronize early-stop decision across all DDP ranks
             stop_tensor = torch.tensor(1 if should_stop else 0, device=device)
             dist.broadcast(stop_tensor, src=0)
             if stop_tensor.item() == 1:

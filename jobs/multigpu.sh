@@ -19,8 +19,11 @@ ml PyTorch/2.12.0
 # Get the absolute path to the project directory.
 PROJECT_DIR=$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)
 
-# Training command
+# Training command for wideresnet on CIFAR-100 dataset with DDP (Distributed Data Parallel)
 TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train_ddp.py --model wideresnet --dataset cifar100 --batch-size 1024 --epochs 100 --base-lr 0.04 --target-accuracy 0.95 --patience 2 --seed 42"
+
+# Training command for ViT on Tiny-ImageNet dataset with DDP (Distributed Data Parallel)
+# TRAINING_SCRIPT="${PROJECT_DIR}/scripts/train_ddp.py --model vit --dataset tiny-imagenet --batch-size 1024 --epochs 100 --optimizer adamw --base-lr 0.0003 --target-accuracy 0.95 --patience 2 --seed 42 --num-workers 8 --amp"
 
 # Check GPU availability
 echo "Checking GPU availability ..."

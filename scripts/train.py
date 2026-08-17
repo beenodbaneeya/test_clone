@@ -27,14 +27,14 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         choices=["wideresnet", "vit"],
-        default="vit",
+        default="wideresnet",
         help="Model architecture to train.",
     )
     parser.add_argument(
         "--dataset",
         type=str,
         choices=["cifar100", "tiny-imagenet"],
-        default="tiny-imagenet",
+        default="cifar100",
         help="Dataset to use.",
     )
     parser.add_argument("--batch-size", type=int, default=256, help="Batch size for training.")
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
         "--data-dir",
         type=str,
         default=None,
-        help="Optional dataset directory (used for Tiny-ImageNet download/storage).",
+        help="Optional dataset directory override.",
     )
     parser.add_argument(
         "--seed",
@@ -134,11 +134,11 @@ def build_optimizer(args: argparse.Namespace, model: nn.Module) -> tuple[Optimiz
 
     learning_rate = args.base_lr if args.base_lr is not None else 1e-3
     if args.optimizer == "sgd":
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=5e-4)
     elif args.optimizer == "adam":
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    else:
-        optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
+    else:  # adamw
+        optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     return optimizer, learning_rate
 
 
@@ -166,6 +166,7 @@ def main() -> None:
     model = build_model(args.model, num_classes, device)
     optimizer, learning_rate = build_optimizer(args, model)
     loss_fn = nn.CrossEntropyLoss()
+
     use_amp = args.amp and device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda") if use_amp else None
 
@@ -206,7 +207,7 @@ def main() -> None:
 
         # Early stopping logic
         if len(val_accuracies) >= args.patience and all(
-            acc >= args.target_accuracy for acc in val_accuracies[-args.patience:]
+            acc >= args.target_accuracy for acc in val_accuracies[-args.patience :]
         ):
             print(f"Target accuracy reached. Early stopping after epoch {epoch + 1}.")
             break

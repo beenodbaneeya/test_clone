@@ -32,6 +32,7 @@ olivia_pytorch/
     multinode.sh
     logs/
   datasets/
+    download_datasets.sh
 ```
 
 
@@ -39,7 +40,13 @@ olivia_pytorch/
 
 1. Clone the repository.
 2. Edit `#SBATCH --account=...` (which is the only change that you should make)
-3. Submit from the `jobs/` directory:
+3. Download the required datasets
+```bash
+cd datasets
+chmod +x download_datasets.sh
+./download_datasets.sh
+```
+4. Submit from the `jobs/` directory:
 
 ```bash
 cd jobs
