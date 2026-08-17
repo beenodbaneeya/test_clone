@@ -89,26 +89,20 @@ def load_cifar100(
 
 
 def _extract_and_organize_tiny_imagenet(root: Path) -> Path:
-    """Extract Tiny-ImageNet ZIP and organize validation structure cleanly without file locks."""
     tiny_dir = root / "tiny-imagenet-200"
     zip_path = root / "tiny-imagenet-200.zip"
     complete_marker = tiny_dir / ".complete"
 
-    # If dataset is already extracted and structured, return immediately
     if complete_marker.exists():
         return tiny_dir
 
-    if not zip_path.exists() and not tiny_dir.exists():
-        raise FileNotFoundError(
-            f"Tiny-ImageNet archive not found at '{zip_path}'. "
-            "Please run 'bash datasets/download_datasets.sh' first."
-        )
+    # Check DDP global rank safely
+    rank = int(os.environ.get("RANK", "0"))
 
-    if zip_path.exists():
-        print("Extracting Tiny-ImageNet archive in Python...", flush=True)
+    if rank == 0 and zip_path.exists():
+        print("Extracting Tiny-ImageNet archive cleanly on Rank 0...", flush=True)
         shutil.rmtree(tiny_dir, ignore_errors=True)
 
-        # Standard extraction
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(root)
 
@@ -116,9 +110,7 @@ def _extract_and_organize_tiny_imagenet(root: Path) -> Path:
         images_dir = val_dir / "images"
         annotations = val_dir / "val_annotations.txt"
 
-        # Organize validation set into ImageFolder format
         if annotations.exists() and images_dir.exists():
-            print("Structuring validation images into class subdirectories...", flush=True)
             created_dirs = set()
             with open(annotations, "r") as f:
                 for line in f:
@@ -135,16 +127,19 @@ def _extract_and_organize_tiny_imagenet(root: Path) -> Path:
                     src = images_dir / img_name
                     dst = target_dir / img_name
                     if src.exists():
-                        os.replace(src, dst)  # OS-level fast move
+                        os.replace(src, dst)
 
             shutil.rmtree(images_dir, ignore_errors=True)
             annotations.unlink(missing_ok=True)
 
         complete_marker.touch()
-        print("Tiny-ImageNet preparation complete.", flush=True)
+        print("Tiny-ImageNet extraction complete.", flush=True)
+
+    # Synchronize multi-GPU processes if running under torch.distributed
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        torch.distributed.barrier()
 
     return tiny_dir
-
 
 def load_imagenet(
     batch_size: int,
