@@ -13,7 +13,6 @@
 
 ml purge
 ml NRIS/GPU
-ml use /cluster/projects/nn9999k/jorn/easybuild-gpu/modules/all
 ml PyTorch/2.12.0
 
 
